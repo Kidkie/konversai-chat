@@ -54,6 +54,7 @@ function konversai_chat_get_settings() {
     }
 
     $settings = wp_parse_args($settings, array(
+        'enabled'    => true,
         'tenant_key' => '',
         'side'       => 'right',
         'height'     => 'raised',
@@ -63,6 +64,7 @@ function konversai_chat_get_settings() {
     $choices = konversai_chat_position_choices();
 
     return array(
+        'enabled'    => (bool) $settings['enabled'],
         'tenant_key' => is_scalar($settings['tenant_key']) ? trim((string) $settings['tenant_key']) : '',
         'side'       => is_string($settings['side']) && isset($choices['side'][$settings['side']]) ? $settings['side'] : 'right',
         'height'     => is_string($settings['height']) && isset($choices['height'][$settings['height']]) ? $settings['height'] : 'raised',
@@ -110,6 +112,15 @@ function konversai_chat_register_settings() {
     add_settings_section('konversai_chat_main', '', '__return_false', 'konversai-chat');
 
     add_settings_field(
+        'enabled',
+        __('Chat widget', 'konversai-chat'),
+        'konversai_chat_render_toggle_field',
+        'konversai-chat',
+        'konversai_chat_main',
+        array('key' => 'enabled', 'label_for' => 'konversai_chat_enabled')
+    );
+
+    add_settings_field(
         'tenant_key',
         __('Tenant key', 'konversai-chat'),
         'konversai_chat_render_field',
@@ -146,6 +157,8 @@ function konversai_chat_sanitize_settings($input) {
     $choices = konversai_chat_position_choices();
 
     return array(
+        // Unchecked checkboxes are not submitted, so a missing value means off
+        'enabled'    => !empty($input['enabled']),
         'tenant_key' => sanitize_text_field($tenant_key),
         // Only accept the predefined choices
         'side'       => isset($input['side']) && is_string($input['side']) && isset($choices['side'][$input['side']]) ? $input['side'] : 'right',
@@ -171,6 +184,24 @@ function konversai_chat_render_field($args) {
         echo '<p class="description">' . esc_html__('The widget is only shown when a tenant key is set.', 'konversai-chat') . '</p>';
     }
 
+}
+
+/**
+ * Render the checkbox that turns the widget on or off
+ */
+function konversai_chat_render_toggle_field($args) {
+    $settings = konversai_chat_get_settings();
+
+    printf(
+        '<label><input type="checkbox" id="%s" name="%s[%s]" value="1" %s /> %s</label>',
+        esc_attr($args['label_for']),
+        esc_attr(KONVERSAI_CHAT_OPTION),
+        esc_attr($args['key']),
+        checked($settings[$args['key']], true, false),
+        esc_html__('Show the chat widget on the site', 'konversai-chat')
+    );
+
+    echo '<p class="description">' . esc_html__('Turn off to hide the widget everywhere without removing the settings.', 'konversai-chat') . '</p>';
 }
 
 /**
@@ -243,8 +274,8 @@ function konversai_chat_render_widget() {
     $settings = konversai_chat_get_settings();
     $api_base = konversai_chat_get_api_base();
 
-    // Never show the widget without a tenant key or a valid script source
-    if ($settings['tenant_key'] === '' || $api_base === '') {
+    // Never show the widget when turned off, or without a tenant key or a valid script source
+    if (!$settings['enabled'] || $settings['tenant_key'] === '' || $api_base === '') {
         return;
     }
 
